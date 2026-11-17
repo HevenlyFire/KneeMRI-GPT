@@ -59,7 +59,14 @@ KneeMRI-GPT/
 
 ## Setup
 
-1. **Get the data.** Request the MRNet dataset from the [Stanford ML Group](https://stanfordmlgroup.github.io/competitions/mrnet/). Its research use agreement does not allow redistribution, so no data is included. Put it under `data/` (`data/train`, `data/valid` and the label CSVs).
+1. **Get the data.** Request the MRNet dataset from the [Stanford ML Group](https://stanfordmlgroup.github.io/competitions/mrnet/). Its research use agreement does not allow redistribution, so no data is included. Unzip it so the repository root contains:
+   ```
+   data/
+   ├── train/{axial,sagittal,coronal}/*.npy
+   ├── valid/{axial,sagittal,coronal}/*.npy
+   ├── train-abnormal.csv  train-acl.csv  train-meniscus.csv
+   └── valid-abnormal.csv  valid-acl.csv  valid-meniscus.csv
+   ```
 2. **Add the base model code.** Clone [MRNet-Competition](https://github.com/yashbhalgat/MRNet-Competition) and copy `model.py`, `loader.py`, `evaluate.py`, `utils.py`, `train.py` and `submit_predictions.py` from its `src/` into this repository's `src/`. In `train.py`, change `os.walk(args.rundir)` to `os.walk(rundir)` so it works when called from the notebook. These files are listed in `.gitignore` so they are not committed by accident.
 3. **Install dependencies.**
    ```bash
@@ -71,7 +78,45 @@ KneeMRI-GPT/
    $env:DASHSCOPE_API_KEY="your-key-here"          # Windows PowerShell
    ```
    Without a key, report generation returns the rule-based fallback report instead of failing.
-5. **Train and evaluate** by running the notebook from the `notebooks/` folder. Checkpoints are written to `runs/`.
+
+## Training
+
+The trained weights are not released, so you need to train the three models yourself. Run `notebooks/training_and_evaluation.ipynb` from the `notebooks/` folder; it switches to the repository root so `data/` and `runs/` resolve there. A GPU is strongly recommended.
+
+**Order matters.** Train the abnormality model first. The ACL and meniscus models use it as a prior:
+
+1. **Abnormal** (notebook cell 3) → `runs/abnormal_triple_alex/`
+2. Run cell 4 to compare the abnormal checkpoints by validation AUC, then set `ABNORMAL_MODEL_PATH` in cells 6 and 7 to the best one.
+3. **ACL** (cell 6) and **meniscus** (cell 7) → `runs/acl_triple_alex/`, `runs/meniscus_triple_alex/`. With a prior set, training skips exams labelled normal, and validation multiplies each prediction by the abnormality probability.
+4. **Select checkpoints** (cell 9): evaluates every saved checkpoint and ranks them by validation AUC (descending), then validation loss (ascending).
+
+**Settings used for all three tasks**
+
+| Setting | Value |
+| --- | --- |
+| Backbone | AlexNet, ImageNet-pretrained, one branch per plane |
+| Optimiser | Adam, learning rate 1e-5, weight decay 0.01 |
+| LR schedule | ReduceLROnPlateau on validation loss (patience 5, factor 0.3) |
+| Epochs | 50 |
+| Batch size | 1 exam |
+| Loss | Class-weighted binary cross-entropy |
+| Seed | 42 |
+
+A checkpoint is saved whenever validation loss improves, named `val<loss>_train<loss>_epoch<n>`.
+
+**Using your checkpoints for inference.** `src/web_infer.py` has default paths from the original runs. Pass your own instead:
+
+```python
+from web_infer import MRDiagnosisService
+
+service = MRDiagnosisService(
+    abnormal_model_path="runs/abnormal_triple_alex/<best checkpoint>",
+    acl_model_path="runs/acl_triple_alex/<best checkpoint>",
+    meniscus_model_path="runs/meniscus_triple_alex/<best checkpoint>",
+)
+```
+
+## Generating a report
 
 Generate a report from three probabilities:
 
