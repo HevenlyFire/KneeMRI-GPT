@@ -1,0 +1,33 @@
+# Secrets
+.env
+
+# Data and model outputs (MRNet data may not be redistributed)
+data/
+runs/
+output/
+demo_npy/
+*.npy
+*.zip
+*.pth
+*.pt
+*.ckpt
+
+# Upstream MRNet-Competition files copied in during setup (no licence to redistribute)
+src/model.py
+src/loader.py
+src/evaluate.py
+src/utils.py
+src/train.py
+src/submit_predictions.py
+
+# Python / Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# OS
+desktop.ini
+Thumbs.db
+.DS_Store
